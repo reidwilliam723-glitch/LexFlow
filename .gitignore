@@ -1,0 +1,57 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+win-x64/
+
+# Publish / packaging output
+publish/
+releases/
+Run/
+*.nupkg
+*.snupkg
+
+# Velopack local state
+.vpk/
+
+# IDE / user-specific
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+launchSettings.json
+
+# Test / coverage output
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.trx
+
+# Secrets and local config — never commit these
+*.pfx
+*.snk
+*.pem
+*.key
+.env
+.env.*
+secrets.json
+appsettings.*.local.json
+
+# Logs and crash dumps
+*.log
+*.tmp
+crash*.txt
+placement.log
+
+# OS noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

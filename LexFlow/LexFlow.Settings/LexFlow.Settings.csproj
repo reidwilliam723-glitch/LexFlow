@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+
+    <!-- Single source of truth for the release version. Settings\release.ps1 reads
+         this value and passes it to "vpk pack -v", so bump it here only. -->
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LexFlow.Core\LexFlow.Core.csproj" />
+    <ProjectReference Include="..\LexFlow.Storage\LexFlow.Storage.csproj" />
+    <ProjectReference Include="..\LexFlow.Profiles\LexFlow.Profiles.csproj" />
+    <ProjectReference Include="..\LexFlow.Privacy\LexFlow.Privacy.csproj" />
+    <ProjectReference Include="..\LexFlow.AI\LexFlow.AI.csproj" />
+    <ProjectReference Include="..\LexFlow.Input\LexFlow.Input.csproj" />
+    <ProjectReference Include="..\LexFlow.Overlay\LexFlow.Overlay.csproj" />
+    <ProjectReference Include="..\LexFlow.Service\LexFlow.Service.csproj" />
+    <ProjectReference Include="..\LexFlow.Onboarding\LexFlow.Onboarding.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\PRIVACY_POLICY.md" />
+    <EmbeddedResource Include="..\TERMS_OF_SERVICE.md" />
+    <EmbeddedResource Include="..\LICENSE" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+</Project>

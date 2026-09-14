@@ -1,0 +1,13 @@
+<Solution>
+  <Project Path="LexFlow.AI/LexFlow.AI.csproj" />
+  <Project Path="LexFlow.Core/LexFlow.Core.csproj" />
+  <Project Path="LexFlow.Input/LexFlow.Input.csproj" />
+  <Project Path="LexFlow.Onboarding/LexFlow.Onboarding.csproj" />
+  <Project Path="LexFlow.Overlay/LexFlow.Overlay.csproj" />
+  <Project Path="LexFlow.Privacy/LexFlow.Privacy.csproj" />
+  <Project Path="LexFlow.Profiles/LexFlow.Profiles.csproj" />
+  <Project Path="LexFlow.Service/LexFlow.Service.csproj" />
+  <Project Path="LexFlow.Settings/LexFlow.Settings.csproj" />
+  <Project Path="LexFlow.Storage\LexFlow.Storage.csproj" />
+  <Project Path="LexFlow.Tests/LexFlow.Tests.csproj" />
+</Solution>

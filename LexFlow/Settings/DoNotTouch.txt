@@ -1,0 +1,20 @@
+LEXFLOW — DO NOT EDIT THIS FOLDER
+
+This folder holds files testers should not change:
+
+- DoNotTouch.txt (this file)
+- release.ps1 (builds the tester installer and GitHub release — for Liam only)
+- publish.ps1 (publishes loose files for release.ps1 to package)
+- publish-portable.ps1 (rebuilds Run\LexFlow.exe for local dev — for Liam only)
+- Developer scripts moved here so they are not mistaken for the app
+- Pointers to source projects in the full repo (LexFlow.Core, LexFlow.Settings, …)
+
+Testers: start the app from the Run folder only (LexFlow.exe).
+Do not delete DLLs or other files that appear beside LexFlow.exe if a rebuild
+is not “single file”. LexFlow will not start without them.
+
+Source code (LexFlow.AI, LexFlow.Core, LexFlow.Input, LexFlow.Onboarding,
+LexFlow.Overlay, LexFlow.Package, LexFlow.Privacy, LexFlow.Profiles,
+LexFlow.Service, LexFlow.Settings, LexFlow.Storage, LexFlow.Tests)
+must not be edited for a test run. Changing those files does not update
+Run\LexFlow.exe until someone publishes again.

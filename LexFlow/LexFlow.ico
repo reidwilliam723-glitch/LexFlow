@@ -1,0 +1,20 @@
+# Placeholder for LexFlow Application Icon
+
+Replace this file with an actual .ico file containing:
+- 16x16, 32x32, 48x48, 64x64, 128x128, 256x256 resolutions
+- Modern blue/indigo design with "L" letter or LexFlow branding
+- Transparent background where appropriate
+- Windows 11 design language compliant
+
+Recommended tools:
+- IcoFX (https://icofx.ro/)
+- ImageMagick (convert command-line tool)
+- Online icon generators
+
+Size specifications:
+- 16x16: Small taskbar icon
+- 32x32: Medium taskbar icon  
+- 48x48: Large taskbar icon
+- 64x64: Extra large taskbar icon
+- 128x128: Desktop shortcut
+- 256x256: High DPI displays
