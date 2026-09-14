@@ -10,6 +10,10 @@
 #
 # The version comes from <Version> in LexFlow.Settings\LexFlow.Settings.csproj.
 # Bump it there and nowhere else.
+#
+# Every run first downloads the current release so vpk can emit a delta package
+# alongside the full one. The very first release has nothing to download; that is
+# expected and the run continues with a full package only.
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
@@ -44,6 +48,48 @@ $version = Get-LexFlowVersion -ProjectPath $project
 Write-Host "LexFlow release version $version (from LexFlow.Settings.csproj)"
 
 & (Join-Path $PSScriptRoot "publish.ps1") -Configuration $Configuration -Runtime $Runtime -OutputDir $publishDir | Out-Null
+
+New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+# vpk can only diff against a previous release that is already sitting in the
+# output directory, so fetch the current one before packing. Without this every
+# release ships as a full package and testers re-download the whole app.
+Write-Host "Fetching previous release for delta generation"
+$downloadArgs = @(
+    "download", "github",
+    "--repoUrl", $RepoUrl,
+    "--outputDir", $releaseDir
+)
+if ($env:GITHUB_TOKEN) {
+    $downloadArgs += @("--token", $env:GITHUB_TOKEN)
+}
+
+# A repo with no releases yet is the expected first-run case, so this step must
+# never abort the run. Both ways PowerShell could turn it into a terminating error
+# are suppressed: $ErrorActionPreference is Stop above, and 7.4+ promotes native
+# command failures on its own unless $PSNativeCommandUseErrorActionPreference is off.
+try {
+    $ErrorActionPreference = "Continue"
+    $PSNativeCommandUseErrorActionPreference = $false
+
+    vpk @downloadArgs
+}
+catch {
+    Write-Host "Could not fetch the previous release: $($_.Exception.Message)"
+}
+finally {
+    $ErrorActionPreference = "Stop"
+}
+
+# vpk warns and still exits 0 when it finds nothing to download, so decide whether
+# a delta is possible from what actually landed on disk rather than the exit code.
+$priorFull = @(Get-ChildItem -Path $releaseDir -Filter "*-full.nupkg" -ErrorAction SilentlyContinue)
+if ($priorFull.Count -gt 0) {
+    Write-Host "Previous release available ($($priorFull.Count) full package). vpk pack will generate a delta."
+}
+else {
+    Write-Host "No previous release to diff against. Packing a full release only."
+}
 
 Write-Host "Packing with vpk"
 $packArgs = @(
