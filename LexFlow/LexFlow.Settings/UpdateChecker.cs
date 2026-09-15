@@ -21,17 +21,17 @@ internal static class UpdateChecker
     /// Fire-and-forget check used at startup. Stays silent unless an update was
     /// downloaded and is ready to install.
     /// </summary>
-    public static Task CheckOnStartupAsync(Action<Action> invokeOnUi)
-        => RunAsync(invokeOnUi, interactive: false);
+    public static Task CheckOnStartupAsync(Action<Action> invokeOnUi, Action requestShutdown)
+        => RunAsync(invokeOnUi, requestShutdown, interactive: false);
 
     /// <summary>
     /// Check triggered by the tray menu. Always reports an outcome so the
     /// person knows the click did something.
     /// </summary>
-    public static Task CheckInteractiveAsync(Action<Action> invokeOnUi)
-        => RunAsync(invokeOnUi, interactive: true);
+    public static Task CheckInteractiveAsync(Action<Action> invokeOnUi, Action requestShutdown)
+        => RunAsync(invokeOnUi, requestShutdown, interactive: true);
 
-    private static async Task RunAsync(Action<Action> invokeOnUi, bool interactive)
+    private static async Task RunAsync(Action<Action> invokeOnUi, Action requestShutdown, bool interactive)
     {
         // A startup check and a tray click can overlap; let the first one finish.
         if (!await CheckGate.WaitAsync(interactive ? TimeSpan.FromSeconds(30) : TimeSpan.Zero))
@@ -81,10 +81,17 @@ internal static class UpdateChecker
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Information);
 
-                if (answer == DialogResult.Yes)
+                if (answer != DialogResult.Yes)
                 {
-                    manager.ApplyUpdatesAndRestart(update);
+                    return;
                 }
+
+                // Stage the updater to wait for this process to exit, then leave
+                // through the app's own shutdown so the service stops and the tray
+                // icon is removed. ApplyUpdatesAndRestart terminates the process
+                // outright, which strands a dead tray icon beside the new instance.
+                manager.WaitExitThenApplyUpdates(update, silent: false, restart: true);
+                requestShutdown();
             });
         }
         catch (Exception ex)

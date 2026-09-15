@@ -372,6 +372,16 @@ static class Program
 
     private static void OnExitRequested(object? sender, EventArgs e)
     {
+        ShutdownGracefully();
+    }
+
+    /// <summary>
+    /// Stops the service and removes the tray icon before letting the message loop
+    /// unwind. The Velopack update path exits through here too, so this must stay
+    /// reachable without going through the tray menu.
+    /// </summary>
+    private static void ShutdownGracefully()
+    {
         _composition?.Service.StopAsync().Wait();
         _trayManager?.Dispose();
         Application.Exit();
@@ -400,12 +410,12 @@ static class Program
             return;
         }
 
-        _ = Task.Run(() => UpdateChecker.CheckOnStartupAsync(InvokeOnUiThread));
+        _ = Task.Run(() => UpdateChecker.CheckOnStartupAsync(InvokeOnUiThread, ShutdownGracefully));
     }
 
     private static void OnUpdatesRequested(object? sender, EventArgs e)
     {
-        _ = Task.Run(() => UpdateChecker.CheckInteractiveAsync(InvokeOnUiThread));
+        _ = Task.Run(() => UpdateChecker.CheckInteractiveAsync(InvokeOnUiThread, ShutdownGracefully));
     }
 
     private static void InvokeOnUiThread(Action action)
