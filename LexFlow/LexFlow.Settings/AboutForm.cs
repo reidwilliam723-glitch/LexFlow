@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Forms;
+using LexFlow.Core;
 
 namespace LexFlow.Settings;
 
@@ -46,7 +47,7 @@ public class AboutForm : Form
         // Version label
         _versionLabel = new Label
         {
-            Text = "Version 1.0.0",
+            Text = $"Version {AppVersion.Current}",
             Font = new Font("Segoe UI", 10),
             Location = new Point(50, 70),
             AutoSize = true
@@ -143,13 +144,10 @@ public class AboutForm : Form
         try
         {
             var assembly = Assembly.GetExecutingAssembly();
-            var assemblyName = assembly.GetName();
-            var version = assemblyName.Version;
 
-            if (version != null)
-            {
-                _versionLabel.Text = $"Version {version}";
-            }
+            // Not assembly.GetName().Version: Directory.Build.props pins that to
+            // 2.0.0.0, which would report a version the release never shipped.
+            _versionLabel.Text = $"Version {AppVersion.Current}";
 
             var copyrightAttribute = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>();
             if (copyrightAttribute != null)

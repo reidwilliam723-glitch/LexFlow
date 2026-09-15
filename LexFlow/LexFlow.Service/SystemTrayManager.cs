@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using LexFlow.Core;
 
 namespace LexFlow.Service;
 
@@ -29,7 +30,7 @@ public class SystemTrayManager : IDisposable
     {
         _notifyIcon = new NotifyIcon
         {
-            Text = "LexFlow - Inactive",
+            Text = $"LexFlow {AppVersion.Current} - Inactive",
             Visible = true
         };
         
@@ -87,7 +88,7 @@ public class SystemTrayManager : IDisposable
             _ => "Unknown"
         };
         
-        var tooltipText = $"LexFlow - {statusText}";
+        var tooltipText = $"LexFlow {AppVersion.Current} - {statusText}";
         if (!string.IsNullOrEmpty(additionalInfo))
         {
             tooltipText += $" ({additionalInfo})";

@@ -112,7 +112,7 @@ static class Program
             StartUpdateChecker();
 
             // Show balloon tip to notify user that LexFlow is running
-            _trayManager.ShowBalloonTip("LexFlow", "LexFlow is running in the background. Right-click the tray icon for options.", ToolTipIcon.Info);
+            _trayManager.ShowBalloonTip($"LexFlow {AppVersion.Current}", "LexFlow is running in the background. Right-click the tray icon for options.", ToolTipIcon.Info);
 
             // Wire quick toggle to update tray status
             _composition.QuickToggleManager.ToggleStateChanged += (sender, isEnabled) =>
