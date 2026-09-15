@@ -49,6 +49,23 @@ Write-Host "LexFlow release version $version (from LexFlow.Settings.csproj)"
 
 & (Join-Path $PSScriptRoot "publish.ps1") -Configuration $Configuration -Runtime $Runtime -OutputDir $publishDir | Out-Null
 
+# Start from an empty output directory. It is scratch space this script rebuilds
+# every run, and leftovers caused two problems: the delta check below counted them
+# as a "previous release" even when GitHub had none, and vpk pack stopped to ask
+# about overwriting a stale package of the same version.
+#
+# The contents are emptied rather than the directory removed, because this script
+# tells you to review the folder between runs and having it open in Explorer or a
+# terminal holds a handle on the directory itself, failing every later run.
+if (Test-Path $releaseDir) {
+    try {
+        Remove-Item -Path (Join-Path $releaseDir "*") -Recurse -Force
+    }
+    catch {
+        throw "Could not clear $releaseDir. Close anything still using files in it, such as a previously built Setup.exe, and run again. $($_.Exception.Message)"
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
 # vpk can only diff against a previous release that is already sitting in the
@@ -83,12 +100,22 @@ finally {
 
 # vpk warns and still exits 0 when it finds nothing to download, so decide whether
 # a delta is possible from what actually landed on disk rather than the exit code.
-$priorFull = @(Get-ChildItem -Path $releaseDir -Filter "*-full.nupkg" -ErrorAction SilentlyContinue)
-if ($priorFull.Count -gt 0) {
-    Write-Host "Previous release available ($($priorFull.Count) full package). vpk pack will generate a delta."
+# The directory was emptied above, so anything here now came from GitHub.
+$downloaded = @(Get-ChildItem -Path $releaseDir -Filter "*-full.nupkg" -ErrorAction SilentlyContinue)
+
+# A download of this same version cannot be diffed against, so it does not count
+# as something to build a delta from. That happens when re-packing a version that
+# is already published.
+$earlier = @($downloaded | Where-Object { $_.Name -notlike "*-$version-full.nupkg" })
+
+if ($earlier.Count -gt 0) {
+    Write-Host "Downloaded $($earlier.Count) earlier release(s) from GitHub. vpk pack will generate a delta."
+}
+elseif ($downloaded.Count -gt 0) {
+    Write-Host "GitHub's newest release is already $version, so there is nothing earlier to diff against. Packing a full release only."
 }
 else {
-    Write-Host "No previous release to diff against. Packing a full release only."
+    Write-Host "GitHub has no previous release to diff against. Packing a full release only."
 }
 
 Write-Host "Packing with vpk"
@@ -100,7 +127,12 @@ $packArgs = @(
     "--packAuthors", "LexFlow",
     "--packDir", $publishDir,
     "--mainExe", "LexFlow.Settings.exe",
-    "--outputDir", $releaseDir
+    "--outputDir", $releaseDir,
+    # Never stop for a keypress. Clearing the output directory above removes the
+    # usual cause, but re-packing a version already published to GitHub pulls that
+    # version down and would prompt again. Deliberately not passed to the upload
+    # step below, where auto-confirming could overwrite a published release.
+    "--yes"
 )
 
 vpk @packArgs
