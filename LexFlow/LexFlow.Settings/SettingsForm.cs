@@ -510,6 +510,11 @@ public partial class SettingsForm : Form
             Margin = new Padding(0, 0, 0, 8)
         };
         ThemeUi.AttachComboDrawing(combo);
+
+        // AttachComboDrawing switches the box to OwnerDrawFixed, so every repaint of
+        // the closed box and each list item is custom-painted. That flickers without
+        // double buffering.
+        ThemeUi.EnableBufferedPaint(combo);
         return combo;
     }
 
@@ -1335,7 +1340,7 @@ public partial class SettingsForm : Form
             return;
         }
 
-        ThemeUi.ApplyToTree(this, _themeManager.CurrentTheme);
+        ThemeUi.ApplyToTreeWithoutFlicker(this, _themeManager.CurrentTheme);
     }
 
     private void AddAppToneOverride()

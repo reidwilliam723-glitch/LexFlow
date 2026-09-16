@@ -1,10 +1,16 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using LexFlow.Core.Theming;
 
 namespace LexFlow.Settings;
 
 internal static class ThemeUi
 {
+    private const int WM_SETREDRAW = 0x000B;
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, bool wParam, int lParam);
+
     public static Color Background(Theme theme) => ColorTranslator.FromHtml(theme.Colors.Background);
 
     public static Color Foreground(Theme theme) => ColorTranslator.FromHtml(theme.Colors.Text);
@@ -41,6 +47,42 @@ internal static class ThemeUi
     public static void ApplyToTree(Control root, Theme theme)
     {
         ApplyToControl(root, theme);
+    }
+
+    /// <summary>
+    /// Recolours a whole window in a single repaint. Every colour assignment during
+    /// the tree walk queues its own paint, which on a form with this many controls
+    /// shows up as a visible top-to-bottom wave. SuspendLayout alone does not help,
+    /// because it batches layout rather than painting, so drawing is switched off at
+    /// the window level for the duration of the walk.
+    /// </summary>
+    public static void ApplyToTreeWithoutFlicker(Form form, Theme theme)
+    {
+        // Nothing to suspend before the window exists, and reading Handle here would
+        // force it to be created early, which callers theming during construction do
+        // not expect.
+        if (!form.IsHandleCreated)
+        {
+            ApplyToTree(form, theme);
+            return;
+        }
+
+        SendMessage(form.Handle, WM_SETREDRAW, false, 0);
+        try
+        {
+            form.SuspendLayout();
+            ApplyToTree(form, theme);
+            form.ResumeLayout(true);
+        }
+        finally
+        {
+            // Must run even if the walk throws, or the window stays permanently
+            // frozen with drawing disabled.
+            SendMessage(form.Handle, WM_SETREDRAW, true, 0);
+        }
+
+        form.Invalidate(true);
+        form.Refresh();
     }
 
     public static void StyleComboBox(ComboBox combo, Theme theme)

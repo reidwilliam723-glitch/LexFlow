@@ -190,6 +190,6 @@ public class LearnedWordsForm : Form
             return;
         }
 
-        ThemeUi.ApplyToTree(this, _themeManager.CurrentTheme);
+        ThemeUi.ApplyToTreeWithoutFlicker(this, _themeManager.CurrentTheme);
     }
 }

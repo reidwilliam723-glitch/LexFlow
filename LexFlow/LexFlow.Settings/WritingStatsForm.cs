@@ -292,6 +292,6 @@ public class WritingStatsForm : Form
             return;
         }
 
-        ThemeUi.ApplyToTree(this, _themeManager.CurrentTheme);
+        ThemeUi.ApplyToTreeWithoutFlicker(this, _themeManager.CurrentTheme);
     }
 }
