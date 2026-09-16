@@ -1100,6 +1100,23 @@ public class LexFlowService
             original, replacement, beforeCaret, out deleteCount, out insertText);
     }
 
+    /// <summary>
+    /// Whether the text a grammar suggestion flagged is still at the trailing edge of
+    /// what has been typed. False means typing continued after the suggestion was
+    /// raised, so the flagged words are no longer where selecting backward by word
+    /// count from the caret would land.
+    /// </summary>
+    private static bool IsGrammarFixStillApplicable(
+        string? original,
+        string? replacement,
+        string? typedBuffer,
+        string? beforeCaret)
+    {
+        var haystack = !string.IsNullOrEmpty(typedBuffer) ? typedBuffer : beforeCaret ?? string.Empty;
+        return SuggestionInsertion.TryReplaceTrailingPhrase(original, replacement, haystack, out _, out _)
+            || SuggestionInsertion.TryReplaceTrailingPhrase(original, replacement, beforeCaret, out _, out _);
+    }
+
     private void ApplyWebEditorAccept(Suggestion suggestion, string? typedBuffer, string? beforeCaret)
     {
         string insert;
@@ -1107,6 +1124,18 @@ public class LexFlowService
         int words;
         if (GrammarSuggestionMapper.TryGetSpanReplacement(suggestion, out var original, out var replacement))
         {
+            // SelectBackwardWords takes the last N words before the caret and cannot
+            // tell whether they are the flagged phrase. Grammar checking lags typing,
+            // so by the time the suggestion is clicked the person has often typed on
+            // and those N words are something else. Confirm the flagged text is still
+            // trailing before selecting anything.
+            if (!IsGrammarFixStillApplicable(original, replacement, typedBuffer, beforeCaret))
+            {
+                DiagnosticLog.Write(
+                    $"ACCEPT web: declining stale grammar fix, original={DiagnosticLog.Escape(original)} is no longer trailing");
+                return;
+            }
+
             words = WebEditorSupport.CountWords(original);
             insert = replacement;
             removed = original;
