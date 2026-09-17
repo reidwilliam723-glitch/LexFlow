@@ -1,16 +1,10 @@
 using System.Reflection;
-using System.Runtime.InteropServices;
 using Lexon.Core.Theming;
 
-namespace Lexon.Settings;
+namespace Lexon.Ui;
 
-internal static class ThemeUi
+public static class ThemeUi
 {
-    private const int WM_SETREDRAW = 0x000B;
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, bool wParam, int lParam);
-
     public static Color Background(Theme theme) => ColorTranslator.FromHtml(theme.Colors.Background);
 
     public static Color Foreground(Theme theme) => ColorTranslator.FromHtml(theme.Colors.Text);
@@ -42,6 +36,10 @@ internal static class ThemeUi
         combo.DrawMode = DrawMode.OwnerDrawFixed;
         combo.DrawItem -= DrawComboItem;
         combo.DrawItem += DrawComboItem;
+
+        // Stop a page-scroll gesture from changing this box's value as the cursor
+        // passes over it. Every combo box in Settings is built through this method.
+        ComboWheel.Guard(combo);
     }
 
     public static void ApplyToTree(Control root, Theme theme)
@@ -50,39 +48,40 @@ internal static class ThemeUi
     }
 
     /// <summary>
-    /// Recolours a whole window in a single repaint. Every colour assignment during
-    /// the tree walk queues its own paint, which on a form with this many controls
-    /// shows up as a visible top-to-bottom wave. SuspendLayout alone does not help,
-    /// because it batches layout rather than painting, so drawing is switched off at
-    /// the window level for the duration of the walk.
+    /// Recolours a window without showing the per-control paint cascade. WinForms
+    /// cannot batch child paints into one frame, so this does not try: it covers the
+    /// window with the new background, applies colours underneath, then drops the
+    /// cover once every child has already painted. Hidden windows skip the cover.
     /// </summary>
     public static void ApplyToTreeWithoutFlicker(Form form, Theme theme)
     {
-        // Nothing to suspend before the window exists, and reading Handle here would
-        // force it to be created early, which callers theming during construction do
-        // not expect.
-        if (!form.IsHandleCreated)
+        if (!form.IsHandleCreated || !form.Visible)
         {
             ApplyToTree(form, theme);
             return;
         }
 
-        SendMessage(form.Handle, WM_SETREDRAW, false, 0);
+        var cover = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Background(theme),
+            TabStop = false
+        };
+        form.Controls.Add(cover);
+        cover.BringToFront();
+        cover.Update();
+
         try
         {
             form.SuspendLayout();
             ApplyToTree(form, theme);
-            form.ResumeLayout(true);
+            form.ResumeLayout(false);
         }
         finally
         {
-            // Must run even if the walk throws, or the window stays permanently
-            // frozen with drawing disabled.
-            SendMessage(form.Handle, WM_SETREDRAW, true, 0);
+            form.Controls.Remove(cover);
+            cover.Dispose();
         }
-
-        form.Invalidate(true);
-        form.Refresh();
     }
 
     public static void StyleComboBox(ComboBox combo, Theme theme)
@@ -133,7 +132,10 @@ internal static class ThemeUi
         }
 
         var index = e.Index >= 0 ? e.Index : combo.SelectedIndex;
-        var selected = (e.State & DrawItemState.Selected) != 0;
+        // Only the open list uses the highlight; a focused closed box keeping
+        // SystemColors.Highlight is why the Theme dropdown stayed a dark slab
+        // after switching to Light.
+        var selected = combo.DroppedDown && (e.State & DrawItemState.Selected) != 0;
         var back = selected ? SystemColors.Highlight : combo.BackColor;
         var fore = selected ? SystemColors.HighlightText : combo.ForeColor;
 
@@ -147,7 +149,7 @@ internal static class ThemeUi
 
         TextRenderer.DrawText(
             e.Graphics,
-            combo.Items[index]?.ToString() ?? string.Empty,
+            combo.GetItemText(combo.Items[index]),
             combo.Font,
             e.Bounds,
             fore,

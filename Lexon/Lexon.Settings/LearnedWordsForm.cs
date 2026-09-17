@@ -1,5 +1,6 @@
 using Lexon.Core.Pipeline;
 using Lexon.Core.Theming;
+using Lexon.Ui;
 
 namespace Lexon.Settings;
 

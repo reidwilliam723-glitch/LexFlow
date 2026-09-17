@@ -79,7 +79,7 @@ static class Program
                 // Show onboarding wizard
                 try
                 {
-                    using var wizard = new OnboardingWizard(_composition.Storage, _composition.Profile);
+                    using var wizard = new OnboardingWizard(_composition.Storage, _composition.Profile, _composition.ThemeManager);
                     var result = wizard.ShowDialog();
 
                     // If user cancels onboarding, exit the application
@@ -110,6 +110,10 @@ static class Program
 
             StartShowSettingsWaiter();
             StartUpdateChecker();
+
+            // Build Settings in the background so the first tray click does not wait
+            // on constructing the whole window. Idle fires once the tray is up.
+            Application.Idle += WarmSettingsOnIdle;
 
             // Show balloon tip to notify user that Lexon is running
             _trayManager.ShowBalloonTip($"Lexon {AppVersion.Current}", "Lexon is running in the background. Right-click the tray icon for options.", ToolTipIcon.Info);
@@ -312,17 +316,35 @@ static class Program
         _trayManager?.InvokeOnUiThread(() => OnSettingsRequested(null, EventArgs.Empty));
     }
 
+    private static void WarmSettingsOnIdle(object? sender, EventArgs e)
+    {
+        Application.Idle -= WarmSettingsOnIdle;
+        if (_shuttingDown)
+        {
+            return;
+        }
+
+        EnsureSettingsForm();
+    }
+
+    private static void EnsureSettingsForm()
+    {
+        if (_settingsForm != null && !_settingsForm.IsDisposed)
+        {
+            return;
+        }
+
+        _settingsForm = new SettingsForm(_composition!.Profile, _composition.PrivacyGuard, _composition.Storage, _composition.ThemeManager, _composition.SuggestionPipeline, _composition.SuggestionOverlay, _composition.PersonalizationManager, _composition.TextExpansionManager, _composition.EditConfirmation, provider => LexonServiceComposer.ApplyAiProvider(_composition, provider), _composition.CloudAiLog);
+        _settingsForm.FormClosed += (_, _) => _settingsForm = null;
+    }
+
     private static void OnSettingsRequested(object? sender, EventArgs e)
     {
         try
         {
-            if (_settingsForm == null || _settingsForm.IsDisposed)
-            {
-                _settingsForm = new SettingsForm(_composition!.Profile, _composition.PrivacyGuard, _composition.Storage, _composition.ThemeManager, _composition.SuggestionPipeline, _composition.SuggestionOverlay, _composition.PersonalizationManager, _composition.TextExpansionManager, _composition.EditConfirmation, provider => LexonServiceComposer.ApplyAiProvider(_composition, provider), _composition.CloudAiLog);
-                _settingsForm.FormClosed += (s, args) => _settingsForm = null;
-            }
+            EnsureSettingsForm();
 
-            if (_settingsForm.WindowState == FormWindowState.Minimized)
+            if (_settingsForm!.WindowState == FormWindowState.Minimized)
             {
                 _settingsForm.WindowState = FormWindowState.Normal;
             }
@@ -332,33 +354,9 @@ static class Program
             _settingsForm.TopMost = true;
             _settingsForm.Activate();
             _settingsForm.TopMost = false;
-
-            try
-            {
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lexon");
-                Directory.CreateDirectory(dir);
-                File.AppendAllText(
-                    Path.Combine(dir, "placement.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} SETTINGS_OPEN visible={_settingsForm.Visible} disposed={_settingsForm.IsDisposed}{Environment.NewLine}");
-            }
-            catch
-            {
-                // Logging must never throw.
-            }
         }
         catch (Exception ex)
         {
-            try
-            {
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lexon");
-                Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "placement.log"), $"{DateTime.Now:HH:mm:ss.fff} SETTINGS_OPEN_FAILED {ex}\n");
-            }
-            catch
-            {
-                // Logging must never throw.
-            }
-
             using var owner = new Form { TopMost = true, ShowInTaskbar = false };
             owner.Show();
             MessageBox.Show(
@@ -382,6 +380,13 @@ static class Program
     /// </summary>
     private static void ShutdownGracefully()
     {
+        _shuttingDown = true;
+        Application.Idle -= WarmSettingsOnIdle;
+        if (_settingsForm is { IsDisposed: false })
+        {
+            _settingsForm.Close();
+        }
+
         _composition?.Service.StopAsync().Wait();
         _trayManager?.Dispose();
         Application.Exit();

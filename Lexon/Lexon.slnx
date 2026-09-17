@@ -10,4 +10,5 @@
   <Project Path="Lexon.Settings/Lexon.Settings.csproj" />
   <Project Path="Lexon.Storage\Lexon.Storage.csproj" />
   <Project Path="Lexon.Tests/Lexon.Tests.csproj" />
+  <Project Path="Lexon.Ui/Lexon.Ui.csproj" />
 </Solution>

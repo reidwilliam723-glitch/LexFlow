@@ -37,6 +37,27 @@ public class WordTransitionModelTests
         Assert.Equal(0, model.GetFollowScore("xyzzy", "the"));
         Assert.Equal(0, model.GetFollowScore("", "the"));
     }
+
+    [Fact]
+    public void GetTopFollowers_ReturnsHighestWeightedFollowers()
+    {
+        var model = new WordTransitionModel();
+        var followers = model.GetTopFollowers("thank", 3);
+
+        Assert.Contains("you", followers);
+        Assert.Equal("you", followers[0]);
+        Assert.True(followers.Count is >= 1 and <= 3);
+    }
+
+    [Fact]
+    public void GetTopFollowers_UnknownWord_ReturnsEmpty()
+    {
+        var model = new WordTransitionModel();
+
+        Assert.Empty(model.GetTopFollowers("xyzzy"));
+        Assert.Empty(model.GetTopFollowers(""));
+        Assert.Empty(model.GetTopFollowers("   "));
+    }
 }
 
 public class SuggestionPipelineBigramTests

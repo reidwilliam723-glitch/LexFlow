@@ -12,10 +12,14 @@ public interface ISuggestionOverlay : IDisposable
     void SetPlacement(string placement);
     void Hide();
     bool IsVisible { get; }
+    bool HasPredictions { get; }
     void MoveTo(int x, int y, int lineHeight = 20);
     void SelectNext();
     void SelectPrevious();
     void ConfirmSelection();
+    void ShowPredictions(PredictedFollowers predictions, int x, int y, int lineHeight = 20);
+    void ConfirmPrediction(int index);
+    void FlashCorrection(string text, int x, int y, int lineHeight = 20);
     event EventHandler<SuggestionSelectedEventArgs>? SuggestionSelected;
 
     /// <summary>

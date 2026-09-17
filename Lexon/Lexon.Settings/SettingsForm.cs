@@ -11,6 +11,7 @@ using Lexon.Core.Expansion;
 using Lexon.Core;
 using Lexon.Core.Models;
 using Lexon.Overlay.Interfaces;
+using Lexon.Ui;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -47,6 +48,7 @@ public partial class SettingsForm : Form
     private CheckBox _chkEnableRewriteHotkey = null!;
     private CheckBox _chkEnableGrammarHotkey = null!;
     private CheckBox _chkGrammarChecking = null!;
+    private CheckBox _chkAutoCorrectTypos = null!;
     private CheckBox _chkLocalMode = null!;
     private TextBox _txtBlockedApps = null!;
     private Button _btnAddBlockedApp = null!;
@@ -169,6 +171,7 @@ public partial class SettingsForm : Form
             }
         };
         ApplyTheme();
+        ComboWheel.GuardTree(this);
         if (_themeManager != null)
         {
             _themeManager.ThemeChanged += OnExternalThemeChanged;
@@ -415,6 +418,7 @@ public partial class SettingsForm : Form
         _btnUndoAdaptation.Click += OnUndoAdaptationClicked;
         _chkEnableRewriteHotkey = Check("Optional shortcut: Ctrl+Alt+R for rewrite (also: select text, then click Aa)");
         _chkGrammarChecking = Check("Automatically suggest grammar fixes (Tab to accept — no shortcut needed)");
+        _chkAutoCorrectTypos = Check("Auto-correct known typos");
         _chkEnableGrammarHotkey = Check("Optional shortcut: Ctrl+Alt+G to check now");
         _cmbGrammarSensitivity = Combo(360);
         _cmbGrammarSensitivity.Items.AddRange(new[] { "Low", "Medium", "High" });
@@ -435,6 +439,7 @@ public partial class SettingsForm : Form
             _btnUndoAdaptation,
             Caption("Grammar (local rules: agreement, typos, punctuation)"),
             _chkGrammarChecking,
+            _chkAutoCorrectTypos,
             _cmbGrammarSensitivity,
             _chkMuteCasualGrammar,
             _txtGrammarMutedApps,
@@ -567,7 +572,6 @@ public partial class SettingsForm : Form
         Padding = new Padding(24, 20, 24, 16);
         ResumeLayout(true);
         ApplyFieldSizes();
-        ApplyTheme();
     }
 
     private void ApplyWideLayout()
@@ -582,7 +586,6 @@ public partial class SettingsForm : Form
         Padding = new Padding(28, 24, 28, 20);
         ResumeLayout(true);
         ApplyFieldSizes();
-        ApplyTheme();
     }
 
     private static void PlaceSections(Control parent, params Control[] sections)
@@ -641,8 +644,8 @@ public partial class SettingsForm : Form
 
     private void OnWritingStatsClicked(object? sender, EventArgs e)
     {
-        using var form = new WritingStatsForm(_personalization, _expansions, _themeManager);
-        form.ShowDialog(this);
+            using var form = new WritingStatsForm(_personalization, _expansions, _themeManager);
+            form.ShowDialog(this);
     }
 
     private void OnExportLearningClicked(object? sender, EventArgs e)
@@ -700,8 +703,8 @@ public partial class SettingsForm : Form
 
     private void OnLearnedWordsClicked(object? sender, EventArgs e)
     {
-        using var form = new LearnedWordsForm(_suggestionPipeline, _themeManager);
-        form.ShowDialog(this);
+            using var form = new LearnedWordsForm(_suggestionPipeline, _themeManager);
+            form.ShowDialog(this);
     }
 
     private void RefreshLearnedUi()
@@ -800,6 +803,7 @@ public partial class SettingsForm : Form
         _cmbAiModel.SelectedIndexChanged += (_, _) => ApplyNow();
         _chkEnableRewriteHotkey.CheckedChanged += (_, _) => ApplyNow();
         _chkGrammarChecking.CheckedChanged += (_, _) => ApplyNow();
+        _chkAutoCorrectTypos.CheckedChanged += (_, _) => ApplyNow();
         _chkEnableGrammarHotkey.CheckedChanged += (_, _) => ApplyNow();
         _cmbSuggestionSort.SelectedIndexChanged += (_, _) => ApplyNow();
         _cmbSuggestionPlacement.SelectedIndexChanged += (_, _) => ApplyNow();
@@ -871,6 +875,7 @@ public partial class SettingsForm : Form
         _chkMuteCasualGrammar.Checked = _profile.GetSetting("MuteGrammarForCasualApps", false);
         _chkEnableRewriteHotkey.Checked = _profile.GetSetting("EnableRewriteHotkey", true);
         _chkGrammarChecking.Checked = _profile.GetSetting("GrammarChecking", true);
+        _chkAutoCorrectTypos.Checked = _profile.GetSetting("AutoCorrectTypos", true);
         _chkEnableGrammarHotkey.Checked = _profile.GetSetting("EnableGrammarHotkey", true);
         var mutedGrammar = _profile.GetSetting<List<string>>("GrammarMutedApps", new List<string>());
         _txtGrammarMutedApps.Text = string.Join(", ", mutedGrammar);
@@ -951,6 +956,7 @@ public partial class SettingsForm : Form
         _profile.SetSetting("MuteGrammarForCasualApps", _chkMuteCasualGrammar.Checked);
         _profile.SetSetting("EnableRewriteHotkey", _chkEnableRewriteHotkey.Checked);
         _profile.SetSetting("GrammarChecking", _chkGrammarChecking.Checked);
+        _profile.SetSetting("AutoCorrectTypos", _chkAutoCorrectTypos.Checked);
         _profile.SetSetting("EnableGrammarHotkey", _chkEnableGrammarHotkey.Checked);
         var mutedGrammar = _txtGrammarMutedApps.Text
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -1319,16 +1325,11 @@ public partial class SettingsForm : Form
 
         var selectedTheme = _cmbTheme.SelectedItem.ToString() ?? "Light";
         _cmbTheme.DroppedDown = false;
+
+        // SetTheme raises ThemeChanged, which this window handles by re-theming
+        // itself. Applying again here recoloured and repainted the whole form a
+        // second time, doubling the visible work of every theme switch.
         _themeManager.SetTheme(selectedTheme);
-        _cmbTheme.SelectedIndexChanged -= OnThemeChanged;
-        try
-        {
-            ApplyTheme();
-        }
-        finally
-        {
-            _cmbTheme.SelectedIndexChanged += OnThemeChanged;
-        }
 
         ApplyNow();
     }
