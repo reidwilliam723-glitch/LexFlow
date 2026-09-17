@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- Version Information -->
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+    <Product>Lexon</Product>
+    <Company>Lexon</Company>
+    <Copyright>Copyright © 2026 Lexon. All rights reserved.</Copyright>
+    <Trademark>Lexon</Trademark>
+
+    <!-- Build Information -->
+    <Authors>Lexon</Authors>
+    <Description>AI-powered typing assistant for Windows with privacy-first design</Description>
+    <PackageProjectUrl>https://lexon.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lexon/lexon</RepositoryUrl>
+    <PackageLicenseExpression>Proprietary</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+</Project>

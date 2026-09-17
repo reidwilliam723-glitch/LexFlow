@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lexon.Core\Lexon.Core.csproj" />
+    <ProjectReference Include="..\Lexon.Input\Lexon.Input.csproj" />
+    <ProjectReference Include="..\Lexon.Overlay\Lexon.Overlay.csproj" />
+    <ProjectReference Include="..\Lexon.Privacy\Lexon.Privacy.csproj" />
+    <ProjectReference Include="..\Lexon.Storage\Lexon.Storage.csproj" />
+    <ProjectReference Include="..\Lexon.Profiles\Lexon.Profiles.csproj" />
+    <ProjectReference Include="..\Lexon.AI\Lexon.AI.csproj" />
+  </ItemGroup>
+
+</Project>

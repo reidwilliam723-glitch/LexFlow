@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+
+    <!-- Single source of truth for the release version. Settings\release.ps1 reads
+         this value and passes it to "vpk pack -v", so bump it here only. -->
+    <Version>1.0.1</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lexon.Core\Lexon.Core.csproj" />
+    <ProjectReference Include="..\Lexon.Storage\Lexon.Storage.csproj" />
+    <ProjectReference Include="..\Lexon.Profiles\Lexon.Profiles.csproj" />
+    <ProjectReference Include="..\Lexon.Privacy\Lexon.Privacy.csproj" />
+    <ProjectReference Include="..\Lexon.AI\Lexon.AI.csproj" />
+    <ProjectReference Include="..\Lexon.Input\Lexon.Input.csproj" />
+    <ProjectReference Include="..\Lexon.Overlay\Lexon.Overlay.csproj" />
+    <ProjectReference Include="..\Lexon.Service\Lexon.Service.csproj" />
+    <ProjectReference Include="..\Lexon.Onboarding\Lexon.Onboarding.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\PRIVACY_POLICY.md" />
+    <EmbeddedResource Include="..\TERMS_OF_SERVICE.md" />
+    <EmbeddedResource Include="..\LICENSE" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+</Project>
