@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -9,9 +9,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Lexon.Core\Lexon.Core.csproj" />
-    <ProjectReference Include="..\Lexon.Storage\Lexon.Storage.csproj" />
-    <ProjectReference Include="..\Lexon.Profiles\Lexon.Profiles.csproj" />
-    <ProjectReference Include="..\Lexon.Ui\Lexon.Ui.csproj" />
   </ItemGroup>
 
 </Project>

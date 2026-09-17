@@ -157,4 +157,16 @@ public class SuggestionInsertionTests
 
         Assert.Equal("hel", word);
     }
+
+    [Theory]
+    [InlineData("teh ", "teh")]
+    [InlineData("hello.", "hello")]
+    [InlineData("please send ", "send")]
+    [InlineData("midword", "")]
+    [InlineData("", "")]
+    [InlineData("  ", "")]
+    public void LastCompletedWord_OnlyAfterASeparator(string text, string expected)
+    {
+        Assert.Equal(expected, SuggestionInsertion.LastCompletedWord(text));
+    }
 }

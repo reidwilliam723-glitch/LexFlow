@@ -82,6 +82,24 @@ public sealed class WordTransitionModel
         }
     }
 
+    public IReadOnlyList<string> GetTopFollowers(string previousWord, int count = 3)
+    {
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(previousWord) ||
+                !_followers.TryGetValue(previousWord, out var followers))
+            {
+                return Array.Empty<string>();
+            }
+
+            return followers
+                .OrderByDescending(kv => kv.Value)
+                .Take(count)
+                .Select(kv => kv.Key)
+                .ToList();
+        }
+    }
+
     public Dictionary<string, Dictionary<string, int>> ExportCounts()
     {
         lock (_lock)

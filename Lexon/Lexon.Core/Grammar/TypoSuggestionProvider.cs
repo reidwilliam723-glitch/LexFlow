@@ -37,17 +37,5 @@ public sealed class TypoSuggestionProvider : ISuggestionProvider
     }
 
     private static string PreserveShape(string typed, string correction)
-    {
-        if (typed.Length > 0 && char.IsUpper(typed[0]))
-        {
-            if (typed.All(char.IsUpper) && !correction.Contains(' '))
-            {
-                return correction.ToUpperInvariant();
-            }
-
-            return char.ToUpperInvariant(correction[0]) + correction[1..];
-        }
-
-        return correction;
-    }
+        => TypoAutoCorrect.PreserveShape(typed, correction);
 }

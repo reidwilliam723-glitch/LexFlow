@@ -176,6 +176,9 @@ public class PersonalizationManager
         }
     }
 
+    public IReadOnlyList<string> GetTopFollowers(string? previousWord, int count = 3)
+        => _wordTransitions.GetTopFollowers(previousWord ?? string.Empty, count);
+
     /// <summary>
     /// Get user's preferred suggestions for a given context
     /// </summary>

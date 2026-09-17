@@ -1,7 +1,9 @@
-using Lexon.Onboarding.Models;
+﻿using Lexon.Onboarding.Models;
 using Lexon.Storage;
 using Lexon.Profiles;
 using Lexon.Core.Interfaces;
+using Lexon.Core.Theming;
+using Lexon.Ui;
 
 namespace Lexon.Onboarding.Wizard;
 
@@ -12,18 +14,28 @@ public partial class OnboardingWizard : Form
 {
     private readonly IStorage _storage;
     private readonly Profile _profile;
+    private readonly ThemeManager? _themeManager;
     private OnboardingState _state = new();
     private int _currentStep = 0;
-    private List<WizardStep>? _steps;
+    private List<WizardStep> _steps = null!;
 
-    public OnboardingWizard(IStorage storage, Profile profile)
+    public OnboardingWizard(IStorage storage, Profile profile, ThemeManager? themeManager = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        
+        _themeManager = themeManager;
+
         InitializeSteps();
         InitializeComponent();
+        ComboWheel.GuardTree(this);
         LoadState();
+        if (_themeManager != null)
+        {
+            _themeManager.ThemeChanged += OnThemeChanged;
+            FormClosed += (_, _) => _themeManager.ThemeChanged -= OnThemeChanged;
+        }
+
+        ApplyTheme();
     }
 
     private void InitializeComponent()
@@ -36,9 +48,10 @@ public partial class OnboardingWizard : Form
         this.MinimumSize = new Size(800, 600);
         this.BackColor = Color.White;
         this.Font = new Font("Segoe UI", 10);
+        ThemeUi.EnableBufferedPaint(this);
 
         // Header
-        var headerPanel = new Panel
+        _headerPanel = new Panel
         {
             Dock = DockStyle.Top,
             Height = 100,
@@ -64,9 +77,9 @@ public partial class OnboardingWizard : Form
             AutoSize = true
         };
         
-        headerPanel.Controls.Add(titleLabel);
-        headerPanel.Controls.Add(subtitleLabel);
-        this.Controls.Add(headerPanel);
+        _headerPanel.Controls.Add(titleLabel);
+        _headerPanel.Controls.Add(subtitleLabel);
+        this.Controls.Add(_headerPanel);
 
         // Content panel
         var contentPanel = new Panel
@@ -85,7 +98,7 @@ public partial class OnboardingWizard : Form
         this.Controls.Add(contentPanel);
 
         // Footer with navigation
-        var footerPanel = new Panel
+        _footerPanel = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 80,
@@ -100,21 +113,23 @@ public partial class OnboardingWizard : Form
             Style = ProgressBarStyle.Continuous
         };
         
-        _backButton = CreateButton("← Back", 520, 20);
+        _backButton = CreateButton("\u2190 Back", 520, 20);
         _backButton.Click += OnBackClicked;
         _backButton.Enabled = false;
         
-        _nextButton = CreateButton("Next →", 630, 20);
+        _nextButton = CreateButton("Next \u2192", 630, 20);
         _nextButton.Click += OnNextClicked;
         
-        footerPanel.Controls.Add(_progressBar);
-        footerPanel.Controls.Add(_backButton);
-        footerPanel.Controls.Add(_nextButton);
-        this.Controls.Add(footerPanel);
+        _footerPanel.Controls.Add(_progressBar);
+        _footerPanel.Controls.Add(_backButton);
+        _footerPanel.Controls.Add(_nextButton);
+        this.Controls.Add(_footerPanel);
 
         LoadStep(0);
     }
 
+    private Panel _headerPanel = null!;
+    private Panel _footerPanel = null!;
     private Panel _stepPanel = null!;
     private ProgressBar _progressBar = null!;
     private Button _backButton = null!;
@@ -128,7 +143,7 @@ public partial class OnboardingWizard : Form
             new PrivacyDisclosureStep(),
             new ProfileSelectionStep(),
             new FeatureToggleStep(),
-            new PreferencesStep(),
+            new PreferencesStep(ApplySelectedTheme),
             new CompletionStep()
         };
     }
@@ -160,10 +175,15 @@ public partial class OnboardingWizard : Form
         
         var step = _steps[stepIndex];
         step.Initialize(_stepPanel, _state);
+
+        // Steps build their own dropdowns, and _stepPanel scrolls. Guarding the whole
+        // step here covers every step without each one having to remember.
+        ComboWheel.GuardTree(_stepPanel);
         
         _progressBar.Value = (int)((stepIndex + 1) * 100.0 / _steps.Count);
         _backButton.Enabled = stepIndex > 0;
-        _nextButton.Text = stepIndex == _steps.Count - 1 ? "Finish" : "Next →";
+        _nextButton.Text = stepIndex == _steps.Count - 1 ? "Finish" : "Next \u2192";
+        ApplyTheme();
     }
 
     private void OnBackClicked(object? sender, EventArgs e)
@@ -229,6 +249,15 @@ public partial class OnboardingWizard : Form
         {
             _profile.SetSetting(pref.Key, pref.Value);
         }
+
+        if (_state.UserPreferences.TryGetValue("Theme", out var themeChoice))
+        {
+            ApplySelectedTheme(themeChoice?.ToString() ?? "Light");
+            if (_themeManager != null)
+            {
+                _profile.SetSetting("Theme", _themeManager.CurrentTheme.Name);
+            }
+        }
         
         // Apply feature toggles
         foreach (var toggle in _state.FeatureToggles)
@@ -247,6 +276,64 @@ public partial class OnboardingWizard : Form
         MessageBox.Show("Setup complete! Lexon is now configured for your needs.", "Welcome to Lexon", MessageBoxButtons.OK, MessageBoxIcon.Information);
         this.DialogResult = DialogResult.OK;
         this.Close();
+    }
+
+    private void ApplySelectedTheme(string themeName)
+    {
+        if (_themeManager == null)
+        {
+            return;
+        }
+
+        _themeManager.SetTheme(ThemeName.Resolve(themeName, SystemAppearance.AppsUseLightTheme()));
+    }
+
+    private void OnThemeChanged(object? sender, ThemeChangedEventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(OnThemeChanged, sender, e);
+            return;
+        }
+
+        ApplyTheme();
+    }
+
+    private void ApplyTheme()
+    {
+        if (_themeManager == null)
+        {
+            return;
+        }
+
+        var theme = _themeManager.CurrentTheme;
+        ThemeUi.ApplyToTreeWithoutFlicker(this, theme);
+
+        var chrome = ThemeUi.Surface(theme);
+        var text = ThemeUi.Foreground(theme);
+        PaintChrome(_headerPanel, chrome, text);
+        PaintChrome(_footerPanel, chrome, text);
+        _backButton.Enabled = _currentStep > 0;
+    }
+
+    private static void PaintChrome(Control panel, Color back, Color fore)
+    {
+        panel.BackColor = back;
+        foreach (Control child in panel.Controls)
+        {
+            if (child is Button)
+            {
+                continue;
+            }
+
+            child.BackColor = back;
+            child.ForeColor = fore;
+        }
     }
 
     private Button CreateButton(string text, int x, int y)
@@ -330,10 +417,16 @@ public class ProfileSelectionStep : WizardStep
 
         foreach (var profile in ProfileTemplates.All)
         {
-            _profileComboBox.Items.Add(new { Name = profile.Name, Description = profile.Description, Id = profile.Id });
+            _profileComboBox.Items.Add(new ProfileChoice
+            {
+                Name = profile.Name,
+                Description = profile.Description,
+                Id = profile.Id
+            });
         }
         _profileComboBox.DisplayMember = "Name";
         _profileComboBox.ValueMember = "Id";
+        ThemeUi.AttachComboDrawing(_profileComboBox);
 
         if (!string.IsNullOrEmpty(state.SelectedProfile))
         {
@@ -352,10 +445,9 @@ public class ProfileSelectionStep : WizardStep
 
         void UpdateProfileDescription()
         {
-            var selectedItem = _profileComboBox.SelectedItem;
-            if (selectedItem != null && selectedItem.GetType().GetProperty("Description") != null)
+            if (_profileComboBox.SelectedItem is ProfileChoice choice)
             {
-                profileDescriptionLabel.Text = selectedItem.GetType().GetProperty("Description")?.GetValue(selectedItem)?.ToString() ?? string.Empty;
+                profileDescriptionLabel.Text = choice.Description;
             }
         }
 
@@ -374,16 +466,20 @@ public class ProfileSelectionStep : WizardStep
 
     public override void Save(OnboardingState state)
     {
-        var selectedItem = _profileComboBox.SelectedItem;
-        if (selectedItem != null && selectedItem.GetType().GetProperty("Id") != null)
+        if (_profileComboBox.SelectedItem is ProfileChoice choice)
         {
-            var id = selectedItem.GetType().GetProperty("Id")?.GetValue(selectedItem)?.ToString();
-            if (id != null)
-            {
-                state.SelectedProfile = id;
-            }
+            state.SelectedProfile = choice.Id;
         }
     }
+}
+
+internal sealed class ProfileChoice
+{
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Id { get; init; } = string.Empty;
+
+    public override string ToString() => Name;
 }
 
 public class FeatureToggleStep : WizardStep
@@ -432,9 +528,15 @@ public class FeatureToggleStep : WizardStep
 
 public class PreferencesStep : WizardStep
 {
+    private readonly Action<string> _themeChosen;
     private ComboBox _aggressivenessComboBox = null!;
     private ComboBox _performanceComboBox = null!;
     private ComboBox _themeComboBox = null!;
+
+    public PreferencesStep(Action<string> themeChosen)
+    {
+        _themeChosen = themeChosen;
+    }
 
     public override void Initialize(Panel panel, OnboardingState state)
     {
@@ -449,7 +551,8 @@ public class PreferencesStep : WizardStep
             Width = 350
         };
         _aggressivenessComboBox.Items.AddRange(new[] { "Low", "Medium", "High" });
-        _aggressivenessComboBox.SelectedIndex = 1;
+        ThemeUi.AttachComboDrawing(_aggressivenessComboBox);
+        SelectPreference(_aggressivenessComboBox, state, "SuggestionAggressiveness", "Medium");
 
         _performanceComboBox = new ComboBox
         {
@@ -458,7 +561,8 @@ public class PreferencesStep : WizardStep
             Width = 350
         };
         _performanceComboBox.Items.AddRange(new[] { "Battery Saver", "Balanced", "Maximum Quality" });
-        _performanceComboBox.SelectedIndex = 1;
+        ThemeUi.AttachComboDrawing(_performanceComboBox);
+        SelectPreference(_performanceComboBox, state, "PerformanceMode", "Balanced");
 
         _themeComboBox = new ComboBox
         {
@@ -466,8 +570,10 @@ public class PreferencesStep : WizardStep
             Font = new Font("Segoe UI", 12),
             Width = 350
         };
-        _themeComboBox.Items.AddRange(new[] { "Light", "Dark", "System" });
-        _themeComboBox.SelectedIndex = 2;
+        _themeComboBox.Items.AddRange(new[] { "Light", "Dark", "High Contrast", "System" });
+        ThemeUi.AttachComboDrawing(_themeComboBox);
+        _themeComboBox.SelectedIndexChanged += OnThemeComboChanged;
+        SelectPreference(_themeComboBox, state, "Theme", "System");
 
         stack.Controls.Add(WizardLayout.FieldRow("Suggestion Aggressiveness:", _aggressivenessComboBox));
         stack.Controls.Add(WizardLayout.FieldRow("Performance Mode:", _performanceComboBox));
@@ -475,11 +581,33 @@ public class PreferencesStep : WizardStep
         panel.Controls.Add(stack);
     }
 
+    private void OnThemeComboChanged(object? sender, EventArgs e)
+    {
+        _themeComboBox.DroppedDown = false;
+        _themeChosen(_themeComboBox.SelectedItem?.ToString() ?? "Light");
+    }
+
     public override void Save(OnboardingState state)
     {
         state.UserPreferences["SuggestionAggressiveness"] = _aggressivenessComboBox.SelectedItem?.ToString() ?? "Medium";
         state.UserPreferences["PerformanceMode"] = _performanceComboBox.SelectedItem?.ToString() ?? "Balanced";
         state.UserPreferences["Theme"] = _themeComboBox.SelectedItem?.ToString() ?? "System";
+    }
+
+    private static void SelectPreference(ComboBox combo, OnboardingState state, string key, string fallback)
+    {
+        var value = fallback;
+        if (state.UserPreferences.TryGetValue(key, out var stored) && stored != null)
+        {
+            value = stored.ToString() ?? fallback;
+        }
+
+        var index = combo.Items.IndexOf(value);
+        combo.SelectedIndex = index >= 0 ? index : combo.Items.IndexOf(fallback);
+        if (combo.SelectedIndex < 0 && combo.Items.Count > 0)
+        {
+            combo.SelectedIndex = 0;
+        }
     }
 }
 

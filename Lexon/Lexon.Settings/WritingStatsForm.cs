@@ -2,6 +2,7 @@ using Lexon.Core;
 using Lexon.Core.Expansion;
 using Lexon.Core.Learning;
 using Lexon.Core.Theming;
+using Lexon.Ui;
 
 namespace Lexon.Settings;
 

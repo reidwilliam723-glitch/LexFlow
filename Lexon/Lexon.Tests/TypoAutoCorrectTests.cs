@@ -1,0 +1,44 @@
+using Lexon.Core.Grammar;
+using Xunit;
+
+namespace Lexon.Tests;
+
+public class TypoAutoCorrectTests
+{
+    [Fact]
+    public void KnownTypo_ReturnsShapedCorrection()
+    {
+        Assert.True(TypoAutoCorrect.TryGetCorrection("teh", enabled: true, learnedWords: [], out var correction));
+        Assert.Equal("the", correction);
+        Assert.True(TypoAutoCorrect.TryGetCorrection("Teh", enabled: true, learnedWords: [], out correction));
+        Assert.Equal("The", correction);
+    }
+
+    [Fact]
+    public void Disabled_DoesNotCorrect()
+    {
+        Assert.False(TypoAutoCorrect.TryGetCorrection("teh", enabled: false, learnedWords: [], out _));
+    }
+
+    [Fact]
+    public void LearnedVocabulary_IsNotAutoCorrected()
+    {
+        Assert.False(TypoAutoCorrect.TryGetCorrection("teh", enabled: true, learnedWords: ["teh"], out _));
+        Assert.False(TypoAutoCorrect.TryGetCorrection("Teh", enabled: true, learnedWords: ["TEH"], out _));
+    }
+
+    [Fact]
+    public void UnknownWord_IsNotCorrected()
+    {
+        Assert.False(TypoAutoCorrect.TryGetCorrection("hello", enabled: true, learnedWords: [], out _));
+    }
+
+    [Fact]
+    public void GetEdit_ReplacesWordAndKeepsSeparator()
+    {
+        var (deleteCount, insertText) = TypoAutoCorrect.GetEdit("teh", "the", ' ');
+
+        Assert.Equal(4, deleteCount);
+        Assert.Equal("the ", insertText);
+    }
+}

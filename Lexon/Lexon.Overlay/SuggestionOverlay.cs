@@ -13,6 +13,10 @@ public class SuggestionOverlay : ISuggestionOverlay
 {
     private IntPtr _windowHandle = IntPtr.Zero;
     private List<Suggestion> _currentSuggestions = new();
+    private List<string> _predictions = new();
+    private readonly List<Rectangle> _chipRects = new();
+    private string? _flashText;
+    private long _flashGeneration;
     private int _selectedIndex = 0;
     private int _scrollOffset = 0;
     public const string WordClassName = "LexonSuggestionOverlay";
@@ -20,6 +24,8 @@ public class SuggestionOverlay : ISuggestionOverlay
 
     private const int VisibleRowCount = 3;
     private const int ItemHeight = 30;
+    private const int ChipHeight = 26;
+    private const int ChipGap = 6;
     private const int ListPadding = 10;
     private const int BannerHeight = 22;
     private readonly OverlayThemePalette _palette;
@@ -277,14 +283,59 @@ public class SuggestionOverlay : ISuggestionOverlay
 
     private int OverlayPixelHeight()
     {
-        int count;
+        int suggestionCount;
+        int predictionCount;
+        bool flashing;
         lock (_suggestionsLock)
         {
-            count = _currentSuggestions.Count;
+            suggestionCount = _currentSuggestions.Count;
+            predictionCount = _predictions.Count;
+            flashing = _flashText != null;
         }
 
-        var rows = Math.Clamp(count, 1, VisibleRowCount);
-        return BannerOffset + rows * ItemHeight + 20;
+        var rows = Math.Clamp(suggestionCount, 0, VisibleRowCount);
+        var chips = predictionCount > 0 || flashing;
+        var height = BannerOffset + ListPadding * 2;
+        if (rows > 0)
+        {
+            height += rows * ItemHeight;
+        }
+        else if (!chips)
+        {
+            height += ItemHeight;
+        }
+
+        if (chips)
+        {
+            height += ChipHeight + 4;
+        }
+
+        return height;
+    }
+
+    private int OverlayPixelWidth()
+    {
+        lock (_suggestionsLock)
+        {
+            var words = new List<string>();
+            if (_flashText != null)
+            {
+                words.Add(_flashText);
+            }
+
+            words.AddRange(_predictions);
+            if (words.Count == 0)
+            {
+                return 300;
+            }
+            var width = ListPadding * 2;
+            for (var i = 0; i < words.Count; i++)
+            {
+                width += ChipGap + 28 + Math.Max(24, words[i].Length * 8);
+            }
+
+            return Math.Max(300, width);
+        }
     }
 
     private void SyncSourceColors()
@@ -481,6 +532,24 @@ public class SuggestionOverlay : ISuggestionOverlay
         return index;
     }
 
+    private int HitTestChipIndex(IntPtr lParam)
+    {
+        int x = (short)(lParam.ToInt64() & 0xFFFF);
+        int y = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
+        lock (_suggestionsLock)
+        {
+            for (var i = 0; i < _chipRects.Count; i++)
+            {
+                if (_chipRects[i].Contains(x, y))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
     private int MaxScrollOffset(int count) => Math.Max(0, count - VisibleRowCount);
 
     private void EnsureSelectionVisible()
@@ -563,6 +632,13 @@ public class SuggestionOverlay : ISuggestionOverlay
 
     private void OnMouseClick(IntPtr lParam)
     {
+        var chipIndex = HitTestChipIndex(lParam);
+        if (chipIndex >= 0)
+        {
+            ConfirmPrediction(chipIndex);
+            return;
+        }
+
         var clickedIndex = HitTestSuggestionIndex(lParam);
 
         lock (_suggestionsLock)
@@ -600,11 +676,15 @@ public class SuggestionOverlay : ISuggestionOverlay
             List<Suggestion> suggestionsCopy;
             int selectedIndexCopy;
             int scrollOffsetCopy;
+            List<string> predictionsCopy;
+            string? flashCopy;
             lock (_suggestionsLock)
             {
                 suggestionsCopy = new List<Suggestion>(_currentSuggestions);
                 selectedIndexCopy = _selectedIndex;
                 scrollOffsetCopy = _scrollOffset;
+                predictionsCopy = new List<string>(_predictions);
+                flashCopy = _flashText;
             }
 
             using var bitmap = new Bitmap(width, height);
@@ -656,6 +736,8 @@ public class SuggestionOverlay : ISuggestionOverlay
                     graphics.DrawString(visible[i].Text ?? string.Empty, font, textBrush, itemRect, format);
                 }
 
+                DrawPredictionChips(graphics, width, height, suggestionsCopy.Count, predictionsCopy, flashCopy, _chrome);
+
                 if (showScroll)
                 {
                     DrawScrollIndicator(graphics, width, height, suggestionsCopy.Count, scrollOffsetCopy, _chrome);
@@ -668,6 +750,74 @@ public class SuggestionOverlay : ISuggestionOverlay
         finally
         {
             EndPaint(hWnd, ref ps);
+        }
+    }
+
+    private void DrawPredictionChips(
+        Graphics graphics,
+        int width,
+        int height,
+        int suggestionCount,
+        List<string> predictions,
+        string? flashText,
+        OverlayChrome chrome)
+    {
+        var chips = new List<(string Text, bool Flash)>();
+        if (flashText != null)
+        {
+            chips.Add((flashText, true));
+        }
+
+        foreach (var word in predictions)
+        {
+            chips.Add((word, false));
+        }
+
+        if (chips.Count == 0)
+        {
+            lock (_suggestionsLock)
+            {
+                _chipRects.Clear();
+            }
+
+            return;
+        }
+
+        var suggestionRows = Math.Clamp(suggestionCount, 0, VisibleRowCount);
+        var y = ListPadding + BannerOffset + (suggestionRows * ItemHeight);
+        using var font = new Font("Segoe UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
+        using var textBrush = new SolidBrush(chrome.Text);
+        var x = ListPadding;
+        var rects = new List<Rectangle>();
+
+        for (var i = 0; i < chips.Count; i++)
+        {
+            var (labelText, isFlash) = chips[i];
+            var predictionIndex = isFlash ? -1 : i - (flashText != null ? 1 : 0);
+            var label = isFlash ? labelText : $"{predictionIndex + 1}  {labelText}";
+            var size = graphics.MeasureString(label, font);
+            var chipWidth = Math.Max(36, (int)Math.Ceiling(size.Width) + 16);
+            var rect = new Rectangle(x, y, chipWidth, ChipHeight);
+            using var path = OverlayChrome.Rounded(rect, 4);
+            using var fill = new SolidBrush(isFlash ? chrome.GrammarHighlight : chrome.SelectedBackground);
+            graphics.FillPath(fill, path);
+            graphics.DrawString(label, font, isFlash ? textBrush : textBrush, rect.X + 8, rect.Y + (ChipHeight - size.Height) / 2);
+            if (!isFlash)
+            {
+                rects.Add(rect);
+            }
+
+            x += chipWidth + ChipGap;
+            if (x > width - ListPadding)
+            {
+                break;
+            }
+        }
+
+        lock (_suggestionsLock)
+        {
+            _chipRects.Clear();
+            _chipRects.AddRange(rects);
         }
     }
 
@@ -702,6 +852,8 @@ public class SuggestionOverlay : ISuggestionOverlay
         lock (_suggestionsLock)
         {
             _currentSuggestions = suggestions.ToList();
+            _predictions = new List<string>();
+            _flashText = null;
             _selectedIndex = 0;
             _scrollOffset = 0;
             _isShowing = _currentSuggestions.Count > 0;
@@ -709,7 +861,7 @@ public class SuggestionOverlay : ISuggestionOverlay
         _lastHoverIndex = -1;
 
         var height = OverlayPixelHeight();
-        var width = 300;
+        var width = OverlayPixelWidth();
 
         var receivedX = x;
         var receivedY = y;
@@ -738,6 +890,121 @@ public class SuggestionOverlay : ISuggestionOverlay
         }
     }
 
+    public void ShowPredictions(PredictedFollowers predictions, int x, int y, int lineHeight = 20)
+    {
+        lock (_suggestionsLock)
+        {
+            _predictions = predictions.Words?.Where(w => !string.IsNullOrWhiteSpace(w)).Take(3).ToList()
+                ?? new List<string>();
+            _isShowing = _predictions.Count > 0 || _currentSuggestions.Count > 0 || _flashText != null;
+        }
+
+        if (!IsVisible)
+        {
+            ForceHideWindow();
+            return;
+        }
+
+        PresentAt(x, y, lineHeight);
+    }
+
+    public void ConfirmPrediction(int index)
+    {
+        string? word = null;
+        lock (_suggestionsLock)
+        {
+            if (!_isShowing || index < 0 || index >= _predictions.Count)
+            {
+                return;
+            }
+
+            word = _predictions[index];
+            _isShowing = false;
+            _predictions = new List<string>();
+            _currentSuggestions = new List<Suggestion>();
+        }
+
+        ForceHideWindow();
+        if (!string.IsNullOrEmpty(word))
+        {
+            OnSuggestionSelected(new Suggestion { Text = word, Source = "Prediction", Score = 1 });
+        }
+    }
+
+    public void FlashCorrection(string text, int x, int y, int lineHeight = 20)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var generation = Interlocked.Increment(ref _flashGeneration);
+        lock (_suggestionsLock)
+        {
+            _flashText = text;
+            _isShowing = true;
+        }
+
+        PresentAt(x, y, lineHeight);
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            Thread.Sleep(400);
+            if (Interlocked.Read(ref _flashGeneration) != generation)
+            {
+                return;
+            }
+
+            lock (_suggestionsLock)
+            {
+                if (_flashText == null)
+                {
+                    return;
+                }
+
+                _flashText = null;
+                if (_predictions.Count == 0 && _currentSuggestions.Count == 0)
+                {
+                    _isShowing = false;
+                }
+            }
+
+            if (!IsVisible)
+            {
+                ForceHideWindow();
+            }
+            else if (_windowHandle != IntPtr.Zero)
+            {
+                PostMessage(_windowHandle, WM_LEXON_REPAINT, IntPtr.Zero, IntPtr.Zero);
+            }
+        });
+    }
+
+    private void PresentAt(int x, int y, int lineHeight)
+    {
+        var height = OverlayPixelHeight();
+        var width = OverlayPixelWidth();
+        var previousDpi = SetThreadDpiAwarenessContext(DpiAwarenessContextPerMonitorV2);
+        try
+        {
+            (x, y) = PlaceAgainstAnchor(x, y, width, height, lineHeight);
+        }
+        finally
+        {
+            SetThreadDpiAwarenessContext(previousDpi);
+        }
+
+        _lastX = x;
+        _lastY = y;
+        _lastWidth = width;
+        _lastHeight = height;
+
+        if (_windowHandle != IntPtr.Zero)
+        {
+            var commandId = Interlocked.Increment(ref _overlayCommandId);
+            PostMessage(_windowHandle, WM_LEXON_SHOW, (IntPtr)commandId, IntPtr.Zero);
+        }
+    }
+
     public void ReplaceSuggestions(IEnumerable<Suggestion> suggestions)
     {
         lock (_suggestionsLock)
@@ -748,6 +1015,8 @@ public class SuggestionOverlay : ISuggestionOverlay
             }
 
             _currentSuggestions = suggestions.ToList();
+            _predictions = new List<string>();
+            _flashText = null;
             _selectedIndex = Math.Clamp(_selectedIndex, 0, Math.Max(0, _currentSuggestions.Count - 1));
             _scrollOffset = 0;
             if (_currentSuggestions.Count == 0)
@@ -883,6 +1152,17 @@ public class SuggestionOverlay : ISuggestionOverlay
         }
     }
 
+    public bool HasPredictions
+    {
+        get
+        {
+            lock (_suggestionsLock)
+            {
+                return _isShowing && _predictions.Count > 0;
+            }
+        }
+    }
+
     private void ApplyPendingShow(IntPtr commandId)
     {
         if (_windowHandle == IntPtr.Zero || commandId.ToInt32() != Volatile.Read(ref _overlayCommandId))
@@ -916,6 +1196,8 @@ public class SuggestionOverlay : ISuggestionOverlay
 
             _isShowing = false;
             _currentSuggestions = new List<Suggestion>();
+            _predictions = new List<string>();
+            _flashText = null;
             _lockedBelow = null;
         }
 

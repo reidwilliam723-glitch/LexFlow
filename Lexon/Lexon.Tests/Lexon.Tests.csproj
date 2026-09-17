@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
     <ProjectReference Include="..\Lexon.AI\Lexon.AI.csproj" />
     <ProjectReference Include="..\Lexon.Service\Lexon.Service.csproj" />
     <ProjectReference Include="..\Lexon.Overlay\Lexon.Overlay.csproj" />
+    <ProjectReference Include="..\Lexon.Ui\Lexon.Ui.csproj" />
   </ItemGroup>
 
 </Project>

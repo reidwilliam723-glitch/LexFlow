@@ -247,7 +247,9 @@ public static class LexonServiceComposer
             keyboardShortcutManager,
             undoManager,
             soundFeedbackManager,
-            grammarOverlay
+            grammarOverlay,
+            () => profile.GetSetting("AutoCorrectTypos", true),
+            personalizationManager
         );
 
         lexonService.AttachWritingEnhancement(selectionRewrite, grammarCheck, mouseListener);

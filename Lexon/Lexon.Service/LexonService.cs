@@ -25,6 +25,8 @@ public class LexonService
     private readonly KeyboardShortcutManager _keyboardShortcutManager;
     private readonly UndoManager _undoManager;
     private readonly SoundFeedbackManager _soundFeedbackManager;
+    private readonly Func<bool> _autoCorrectEnabled;
+    private readonly PersonalizationManager? _personalization;
     private SelectionRewriteService? _rewrite;
     private GrammarCheckService? _grammar;
     private MouseListener? _mouseListener;
@@ -80,7 +82,9 @@ public class LexonService
         KeyboardShortcutManager keyboardShortcutManager,
         UndoManager undoManager,
         SoundFeedbackManager soundFeedbackManager,
-        ISuggestionOverlay? grammarOverlay = null)
+        ISuggestionOverlay? grammarOverlay = null,
+        Func<bool>? autoCorrectEnabled = null,
+        PersonalizationManager? personalization = null)
     {
         _suggestionPipeline = suggestionPipeline ?? throw new ArgumentNullException(nameof(suggestionPipeline));
         _keyboardListener = keyboardListener ?? throw new ArgumentNullException(nameof(keyboardListener));
@@ -93,6 +97,8 @@ public class LexonService
         _keyboardShortcutManager = keyboardShortcutManager ?? throw new ArgumentNullException(nameof(keyboardShortcutManager));
         _undoManager = undoManager ?? throw new ArgumentNullException(nameof(undoManager));
         _soundFeedbackManager = soundFeedbackManager ?? throw new ArgumentNullException(nameof(soundFeedbackManager));
+        _autoCorrectEnabled = autoCorrectEnabled ?? (() => false);
+        _personalization = personalization;
 
         // Wire up event handlers
         _keyboardListener.KeyPressed += OnKeyPressed;
@@ -288,12 +294,17 @@ public class LexonService
         // Otherwise Windows delivers Tab to the editor and you get indentation spaces.
         if (e.VirtualKey == 9 && !e.IsShiftPressed && !e.IsControlPressed && !e.IsAltPressed)
         {
-            if (AnySuggestionOverlayVisible())
+            if (SuggestionListVisible())
             {
                 e.Handled = true;
                 QueueOffHook(AcceptFromTab);
                 return;
             }
+        }
+
+        if (TryHandlePredictionNumberKey(e))
+        {
+            return;
         }
 
         _keyboardShortcutManager.OnKeyPressed(e);
@@ -313,7 +324,11 @@ public class LexonService
             HideSuggestions();
             var typed = _focusTracker.GetTypedBufferText();
             var offered = _lastOfferedCompletions.ToList();
-            QueueOffHook(() => _suggestionPipeline.LearnWritingStyle(typed, _currentContext, offered));
+            QueueOffHook(() =>
+            {
+                _suggestionPipeline.LearnWritingStyle(typed, _currentContext, offered);
+                OnWordCompleted(typed);
+            });
             _grammar?.NoteActivity();
             _grammar?.SchedulePauseCheck();
             return;
@@ -321,7 +336,7 @@ public class LexonService
 
         // Arrow VKs (38/40) sit inside 32–126, so overlay navigation must run
         // before the "printable character" branch or Up/Down are ignored.
-        if (AnySuggestionOverlayVisible()
+        if (SuggestionListVisible()
             && !e.IsShiftPressed && !e.IsControlPressed && !e.IsAltPressed)
         {
             var navOverlay = NavigationOverlay();
@@ -362,7 +377,11 @@ public class LexonService
                     HideSuggestions();
                     var typed = _focusTracker.GetTypedBufferText();
                     var offered = _lastOfferedCompletions.ToList();
-                    QueueOffHook(() => _suggestionPipeline.LearnWritingStyle(typed, _currentContext, offered));
+                    QueueOffHook(() =>
+                    {
+                        _suggestionPipeline.LearnWritingStyle(typed, _currentContext, offered);
+                        OnWordCompleted(typed);
+                    });
                 }
                 else
                 {
@@ -426,6 +445,127 @@ public class LexonService
         return virtualKey is >= 48 and <= 90 or >= 186;
     }
 
+    private bool TryHandlePredictionNumberKey(Input.Interfaces.KeyboardEventArgs e)
+    {
+        if (e.IsShiftPressed || e.IsControlPressed || e.IsAltPressed || !_suggestionOverlay.HasPredictions)
+        {
+            return false;
+        }
+
+        var index = e.VirtualKey switch
+        {
+            0x31 or 0x61 => 0,
+            0x32 or 0x62 => 1,
+            0x33 or 0x63 => 2,
+            _ => -1
+        };
+        if (index < 0)
+        {
+            return false;
+        }
+
+        e.Handled = true;
+        QueueOffHook(() => _suggestionOverlay.ConfirmPrediction(index));
+        return true;
+    }
+
+    private void OnWordCompleted(string typed)
+    {
+        var generation = Interlocked.Read(ref _suggestionGeneration);
+        TextContext context;
+        try
+        {
+            context = _focusTracker.GetCurrentContext();
+        }
+        catch
+        {
+            context = _currentContext;
+        }
+
+        if (_privacyGuard.ShouldBlockAssistance(context))
+        {
+            return;
+        }
+
+        if (generation != Interlocked.Read(ref _suggestionGeneration))
+        {
+            return;
+        }
+
+        _currentContext = context;
+
+        var latest = _focusTracker.GetTypedBufferText() ?? typed;
+        if (SuggestionInsertion.LastCompletedWord(latest).Length == 0)
+        {
+            return;
+        }
+
+        if (TryApplyTypoAutoCorrect(latest, context))
+        {
+            latest = _focusTracker.GetTypedBufferText() ?? latest;
+        }
+
+        if (generation != Interlocked.Read(ref _suggestionGeneration))
+        {
+            return;
+        }
+
+        ShowNextWordPredictions(latest, context);
+    }
+
+    private bool TryApplyTypoAutoCorrect(string typed, TextContext context)
+    {
+        var enabled = _autoCorrectEnabled();
+        var word = SuggestionInsertion.LastCompletedWord(typed);
+        if (!TypoAutoCorrect.TryGetCorrection(word, enabled, _suggestionPipeline.GetLearnedWords(), out var correction))
+        {
+            return false;
+        }
+
+        var separator = typed[^1];
+        var (deleteCount, insertText) = TypoAutoCorrect.GetEdit(word, correction, separator);
+
+        for (var i = 0; i < deleteCount; i++)
+        {
+            _focusTracker.AddTypedCharacter('\b');
+        }
+
+        foreach (var ch in insertText)
+        {
+            _focusTracker.AddTypedCharacter(ch);
+        }
+
+        _textInjector.DeleteBackward(deleteCount);
+        _textInjector.InjectText(insertText);
+
+        var (x, y) = GetWordAnchorPosition();
+        _suggestionOverlay.FlashCorrection(correction, x, y, OverlayLineHeight());
+        return true;
+    }
+
+    private void ShowNextWordPredictions(string typed, TextContext context)
+    {
+        if (_personalization == null)
+        {
+            return;
+        }
+
+        var previous = SuggestionInsertion.LastCompletedWord(typed);
+        var words = _personalization.GetTopFollowers(previous, 3);
+        if (words.Count == 0)
+        {
+            return;
+        }
+
+        var (x, y) = GetWordAnchorPosition();
+        _suggestionOverlay.ShowPredictions(
+            new PredictedFollowers { PreviousWord = previous, Words = words },
+            x,
+            y,
+            OverlayLineHeight());
+        _isOverlayVisible = AnySuggestionOverlayVisible();
+    }
+
     private void AcceptFromTab()
     {
         if (_grammarOverlay is { IsVisible: true })
@@ -446,6 +586,14 @@ public class LexonService
 
     private bool AnySuggestionOverlayVisible()
         => _suggestionOverlay.IsVisible || _grammarOverlay is { IsVisible: true };
+
+    /// <summary>
+    /// True when Tab/Enter/arrows should target the suggestion or grammar list.
+    /// Next-word chips are accepted with 1/2/3 or click, not Tab.
+    /// </summary>
+    private bool SuggestionListVisible()
+        => _grammarOverlay is { IsVisible: true }
+           || (_suggestionOverlay.IsVisible && !_suggestionOverlay.HasPredictions);
 
     private ISuggestionOverlay? NavigationOverlay()
     {
@@ -469,14 +617,14 @@ public class LexonService
             return;
         }
 
-        if (!HasInProgressWord())
+        if (generation != Interlocked.Read(ref _suggestionGeneration))
         {
-            HideSuggestionsIfNotPinned();
             return;
         }
 
-        if (generation != Interlocked.Read(ref _suggestionGeneration))
+        if (!HasInProgressWord())
         {
+            HideSuggestionsIfNotPinned();
             return;
         }
 
@@ -491,7 +639,7 @@ public class LexonService
                 _cancellationTokenSource?.Token ?? default)).ToList();
             if (generation != Interlocked.Read(ref _suggestionGeneration) || !HasInProgressWord())
             {
-                if (!HasInProgressWord())
+                if (generation == Interlocked.Read(ref _suggestionGeneration) && !HasInProgressWord())
                 {
                     HideSuggestionsIfNotPinned();
                 }
@@ -513,11 +661,13 @@ public class LexonService
 
         if (!HasInProgressWord())
         {
-            HideSuggestionsIfNotPinned();
+            if (generation == Interlocked.Read(ref _suggestionGeneration))
+            {
+                HideSuggestionsIfNotPinned();
+            }
+
             return;
         }
-
-        _currentContext = _focusTracker.GetCurrentContext();
 
         if (generation != Interlocked.Read(ref _suggestionGeneration))
         {
@@ -792,7 +942,11 @@ public class LexonService
 
         if (items.Count == 0)
         {
-            overlay.Hide();
+            if (!(overlay.HasPredictions && !HasInProgressWord()))
+            {
+                overlay.Hide();
+            }
+
             return;
         }
 
@@ -929,6 +1083,13 @@ public class LexonService
 
     private void HideSuggestionsIfNotPinned()
     {
+        // Keep next-word chips after a completed word. Drop them as soon as
+        // the next word is in progress so they never sit mid-token.
+        if (_suggestionOverlay.HasPredictions && !HasInProgressWord())
+        {
+            return;
+        }
+
         if (IsShowingPinnedSuggestion())
         {
             _suggestionOverlay.Hide();
@@ -991,7 +1152,21 @@ public class LexonService
         int deleteCount;
         string insertText;
         string undoOriginal;
-        if (TryGrammarReplacement(e.SelectedSuggestion, typedBuffer, beforeCaret, out deleteCount, out insertText, out undoOriginal))
+        var isPrediction = string.Equals(e.SelectedSuggestion.Source, "Prediction", StringComparison.Ordinal);
+        if (isPrediction)
+        {
+            // Next-word chips insert after a completed word. Never treat the
+            // previous token as a prefix to replace.
+            deleteCount = 0;
+            insertText = suggestionText;
+            if (!insertText.EndsWith(' '))
+            {
+                insertText += " ";
+            }
+
+            undoOriginal = string.Empty;
+        }
+        else if (TryGrammarReplacement(e.SelectedSuggestion, typedBuffer, beforeCaret, out deleteCount, out insertText, out undoOriginal))
         {
         }
         else
@@ -1030,7 +1205,7 @@ public class LexonService
             _currentContext.ApplicationName,
             _currentContext.WindowTitle,
             null);
-        if (webEditor || grammarFix)
+        if (!isPrediction && (webEditor || grammarFix))
         {
             ApplyWebEditorAccept(e.SelectedSuggestion, typedBuffer, beforeCaret);
         }

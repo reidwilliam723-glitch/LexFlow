@@ -180,6 +180,37 @@ public static class SuggestionInsertion
         return text[start..];
     }
 
+    /// <summary>
+    /// The word immediately before a trailing separator, or empty when the
+    /// caret is still inside a word.
+    /// </summary>
+    public static string LastCompletedWord(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || !IsWordSeparator(text[^1]))
+        {
+            return string.Empty;
+        }
+
+        var end = text.Length;
+        while (end > 0 && IsWordSeparator(text[end - 1]))
+        {
+            end--;
+        }
+
+        if (end == 0)
+        {
+            return string.Empty;
+        }
+
+        var start = end;
+        while (start > 0 && !IsWordSeparator(text[start - 1]))
+        {
+            start--;
+        }
+
+        return text[start..end];
+    }
+
     public static string TextBeforeCaret(string? fullText, int caretPosition)
     {
         if (string.IsNullOrEmpty(fullText))
