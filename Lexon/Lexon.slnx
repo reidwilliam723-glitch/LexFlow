@@ -1,0 +1,13 @@
+<Solution>
+  <Project Path="Lexon.AI/Lexon.AI.csproj" />
+  <Project Path="Lexon.Core/Lexon.Core.csproj" />
+  <Project Path="Lexon.Input/Lexon.Input.csproj" />
+  <Project Path="Lexon.Onboarding/Lexon.Onboarding.csproj" />
+  <Project Path="Lexon.Overlay/Lexon.Overlay.csproj" />
+  <Project Path="Lexon.Privacy/Lexon.Privacy.csproj" />
+  <Project Path="Lexon.Profiles/Lexon.Profiles.csproj" />
+  <Project Path="Lexon.Service/Lexon.Service.csproj" />
+  <Project Path="Lexon.Settings/Lexon.Settings.csproj" />
+  <Project Path="Lexon.Storage\Lexon.Storage.csproj" />
+  <Project Path="Lexon.Tests/Lexon.Tests.csproj" />
+</Solution>
